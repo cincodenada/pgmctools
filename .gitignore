@@ -1,0 +1,7 @@
+*.sw[a-p]
+*.pyc
+*~
+build/
+
+*.ini
+!defaults.ini
