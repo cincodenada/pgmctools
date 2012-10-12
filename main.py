@@ -123,6 +123,28 @@ class MainHandler(webapp2.RequestHandler):
     def get(self):
         self.response.write('Hello world!')
 
+class AttendanceUpdateHandler(BaseHandler):
+    def post(self):
+        spr_client = gdata.spreadsheets.client.SpreadsheetsClient()
+        self.token.authorize(spr_client)
+
+        update_req = gdata.spreadsheets.data.build_batch_cells_update(extconf.get('spreadsheet','key'), self.request.get('wkey'))
+        update_req.add_set_cell(self.request.get('row'),self.request.get('col'),self.request.get('value'))
+
+        response = spr_client.batch(update_req, force=True)
+
+        celldata = response.entry[0]
+        return_json = {
+            'row': celldata.cell.row,
+            'col': celldata.cell.col,
+            'value': celldata.cell.input_value,
+            'status': celldata.batch_status.code,
+            'text_status': celldata.batch_status.reason
+        }
+            
+        self.response.content_type = 'application/json'
+        self.response.write(json.dumps(return_json))
+
 class AttendanceHandler(BaseHandler):
     def get(self, params=None):
         
@@ -136,9 +158,7 @@ class AttendanceHandler(BaseHandler):
         worksheetlist = {}
         for entry in allsheets:
             if(entry.title.text.find('Attendance') > -1):
-                print entry.id.text
                 mo = re.search("\/([\w\d]+)$",entry.id.text)
-                print mo.group(1)
                 if(not mo is None):
                     worksheetlist[entry.title.text] = mo.group(1)
 
@@ -147,7 +167,9 @@ class AttendanceHandler(BaseHandler):
         datelist = {}
         attdata = {}
         namedata = {}
+        namelist = []
         namecols = ['last','first','status_holiday','status_spring','status_summer']
+        exclude_statuses = ['LOA','Inactive']
         if(cursheet):
             #Load the column headings
             headerQuery = gdata.spreadsheets.client.CellQuery(
@@ -161,8 +183,6 @@ class AttendanceHandler(BaseHandler):
                 try:
                     date = datetime.strptime(entry.cell.text, '%m/%d')
                     datelist[entry.cell.text] = entry.cell.col
-                    print date
-                    print entry.cell.col + ":" + entry.cell.text
                 except ValueError:
                     pass
             
@@ -178,10 +198,10 @@ class AttendanceHandler(BaseHandler):
                     max_col=curdate
                 )
 
-                namelist = spr_client.get_cells(extconf.get('spreadsheet','key'), cursheet, query=nameQuery)
-                for cell in namelist.entry:
+                namefeed = spr_client.get_cells(extconf.get('spreadsheet','key'), cursheet, query=nameQuery)
+                for cell in namefeed.entry:
                     if(not cell.cell.row in namedata):
-                        namedata[cell.cell.row] = {}
+                        namedata[cell.cell.row] = {'row':cell.cell.row}
 
                     namedata[cell.cell.row][namecols[int(cell.cell.col) - 1]] = cell.cell.text
 
@@ -197,6 +217,7 @@ class AttendanceHandler(BaseHandler):
 
 app = webapp2.WSGIApplication([
     ('/', MainHandler),
+    ('/att/update', AttendanceUpdateHandler),
     ('/att/(.*)', AttendanceHandler),
     ('/att', AttendanceHandler),
     ('/oauth_callback', OAuthHandler)
