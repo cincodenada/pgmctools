@@ -1,18 +1,23 @@
 <%!
     import json
 %>
+<!DOCTYPE html>
 <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="stylesheet" href="//code.jquery.com/mobile/1.2.0/jquery.mobile-1.2.0.css" />
         <script src="//code.jquery.com/jquery-1.8.2.js"></script>
+        <script type="text/javascript">
+            $(document).bind("mobileinit", function() { $.mobile.ajaxEnabled = false; });
+        </script>
         <script src="//code.jquery.com/mobile/1.2.0/jquery.mobile-1.2.0.js"></script>
         <script type="text/javascript">
-            var namedata = ${json.dumps(namedata.values())};
+            var namelist = ${json.dumps(namelist)};
             var attdata = ${json.dumps(attdata)};
             var nameindex = 0;
             var curname;
 
-            $(function(){
+            $(document).ready(function(evt){
                 $('#section_sel').change(function() {
                     $(this).closest('form').submit()
                 })
@@ -20,89 +25,108 @@
                     $(this).closest('form').submit()
                 })
                 $('#sec_date_sel').submit(function() {
-                    if(
-                        $(this).find('#selection_sel').val() == ""
-                      ) {
+                    if($(this).find('#selection_sel').val() == "") {
                         return false;
                     }
                 })
+                
+                $('#btn_prev').click(function() { updateName(nameindex - 1); });
+                $('#btn_next').click(function() { updateName(nameindex + 1); });
+                if(namelist.length) {
+                    updateName(0);
+                }
+
+                $('#input.attendance').click(function() {
+                });
             });
 
             var valid_stats = ['P','X','XC','LA','LE','NI','SA'];
             function updateName(newindex) {
-                curname = namedata[newindex];
+                if(newindex < 0) { newindex = namelist.length - 1; }
+                if(newindex >= namelist.length) { newindex = 0; }
+                nameindex = newindex;
+                curname = namelist[newindex];
+                curatt = attdata[curname.row];
+                if(!curname) { curname = "Name Not Found"; }
+                if(!curatt) { curatt = ""; }
+
                 $('#display_name').text(curname.first + " " + curname.last);
-                attarr = attdata[curname.row].split('-');
+                attarr = curatt.split('-');
                 attstat = attarr[0];
-                if(count(attarr) == 2 && (attstat == 'LA' || attstat == 'LE')) { 
+                if(attarr.length == 2 && (attstat == 'LA' || attstat == 'LE')) { 
                     attlen = attarr[1]; 
                 }
-                if($.inArray(attstat, valid_stats)) {
-                    $('#att_' + attstat).checkboxradio('enable');
+                if($.inArray(attstat, valid_stats) != -1) {
+                    $('#att_' + attstat).attr('checked','checked');
                 } else {
-                    $('#att_other').checkboxradio('enable');
+                    $('#att_other').attr('checked','checked');
+                    $('#other_text').val(attstat);
                 }
+                $('#attendance_record input[type=radio]').checkboxradio('refresh');
             }
         </script>
     </head>
     <body>
-        <div data-role="header" data-position="fixed">
-            <h1>${cursheet}</h1>
-            <a href="" data-icon="search"></a>
-        </div>
-        <form id="sec_date_sel" method="GET">
-            <fieldset data-role="controlgroup" data-type="horizontal">
-                <select id="section_sel" name="wkey">
-                    <option value="">Select a Section</option>
-                    % for title in worksheets.iterkeys():
-                    <option value="${worksheets[title]}" ${'selected="selected"' if worksheets[title] == cursheet else '' | n}>${title}</option>
-                    % endfor
-                </select>
-                <select id="date_sel" name="date">
-                    <option value="">Select a Date</option>
-                    % for date in sorted(dates.iterkeys()):
-                    <option value="${dates[date]}"${'selected="selected"' if dates[date] == curdate else '' | n}>${date}</option>
-                    % endfor
-                </select>
-            </fieldset>
-        </form>
-        <div id="attendance_record" style="text-align: center">
-            <h1 id="display_name"></h1>
-            <fieldset>
-                <div data-role="controlgroup" data-type="horizontal">
-                    <input type="radio" name="attendance" id="att_P"/>
-                    <label for="att_P">Present</label>
-                </div>
-                <div data-role="controlgroup" data-type="horizontal">
-                    <input type="radio" id="att_LA" name="attendance" value="LA"/>
-                    <label for="att_LA">LA</label>
-                    <input type="radio" id="att_LE" name="attendance"/>
-                    <label for="att_LE">LE</label>
-                    <select class="attendance" id="att_lateness" name="att_lateness">
-                        <option value="0">N/S</option>
-                        <option value="30">30</option>
-                        <option value="45">45</option>
-                        <option value="60">60</option>
-                        <option value="other">Other</option>
+        <div data-role="page" id="page_attendance">
+            <div data-role="header" data-position="fixed">
+                <h1>${worksheets[cursheet] if cursheet else ''}</h1>
+                <a href="" id="btn_prev" data-role="button" data-icon="arrow-l" data-iconpos="notext">Prev</a>
+                <a href="" id="btn_next" data-role="button" data-icon="arrow-r" data-iconpos="notext">Next</a>
+            </div>
+            <form id="sec_date_sel" method="GET">
+                <fieldset data-role="controlgroup" data-type="horizontal">
+                    <select id="section_sel" name="wkey">
+                        <option value="">Select a Section</option>
+                        % for key in worksheets.iterkeys():
+                        <option value="${key}" ${'selected="selected"' if key == cursheet else '' | n}>${worksheets[key]}</option>
+                        % endfor
                     </select>
-                </div>
-                <div data-role="controlgroup" data-type="horizontal">
-                    <input type="radio" name="attendance" id="att_X" value="X"/>
-                    <label for="att_X">X</label>
-                    <input type="radio" name="attendance" id="att_XC" value="XC"/>
-                    <label for="att_XC">XC</label>
-                </div>
-                <div data-role="controlgroup" data-type="horizontal">
-                    <input type="radio" name="attendance" id="att_SA" value="SA"/>
-                    <label for="att_SA">SA</label>
-                    <input type="radio" name="attendance" id="att_NI" value="NI"/>
-                    <label for="att_NI">NI</label>
-                </div>
-                <div data-role="controlgroup" data-type="horizontal">
-                    <input type="radio" name="attendance" id="att_other" value="other"/>
-                    <label for="att_other">Other</label>
-                    <input type="text" name="other_text"/>
-            </fieldset>
+                    <select id="date_sel" name="date">
+                        <option value="">Select a Date</option>
+                        % for col in sorted(dates.iterkeys()):
+                        <option value="${col}"${'selected="selected"' if col == curdate else '' | n}>${dates[col]}</option>
+                        % endfor
+                    </select>
+                </fieldset>
+            </form>
+            <div id="attendance_record" style="text-align: center">
+                <h1 id="display_name"></h1>
+                <fieldset>
+                    <div data-role="controlgroup" data-type="horizontal">
+                        <input type="radio" name="attendance" id="att_P"/>
+                        <label for="att_P">Present</label>
+                    </div>
+                    <div data-role="controlgroup" data-type="horizontal">
+                        <input type="radio" id="att_LA" name="attendance" value="LA"/>
+                        <label for="att_LA">LA</label>
+                        <input type="radio" id="att_LE" name="attendance"/>
+                        <label for="att_LE">LE</label>
+                        <select class="attendance" id="att_lateness" name="att_lateness">
+                            <option value="0">N/S</option>
+                            <option value="30">30</option>
+                            <option value="45">45</option>
+                            <option value="60">60</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div data-role="controlgroup" data-type="horizontal">
+                        <input type="radio" name="attendance" id="att_X" value="X"/>
+                        <label for="att_X">X</label>
+                        <input type="radio" name="attendance" id="att_XC" value="XC"/>
+                        <label for="att_XC">XC</label>
+                    </div>
+                    <div data-role="controlgroup" data-type="horizontal">
+                        <input type="radio" name="attendance" id="att_SA" value="SA"/>
+                        <label for="att_SA">SA</label>
+                        <input type="radio" name="attendance" id="att_NI" value="NI"/>
+                        <label for="att_NI">NI</label>
+                    </div>
+                    <div data-role="controlgroup" data-type="horizontal">
+                        <input type="radio" name="attendance" id="att_other" value="other"/>
+                        <label for="att_other">Other</label>
+                        <input type="text" name="other_text"/>
+                </fieldset>
+            </div>
         </div>
     </body>
 </html>
