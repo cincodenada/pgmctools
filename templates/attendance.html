@@ -14,6 +14,8 @@
         <script type="text/javascript">
             var namelist = ${json.dumps(namelist)};
             var attdata = ${json.dumps(attdata)};
+            var cursheet = '${cursheet}';
+            var curdate = '${curdate}';
             var nameindex = 0;
             var curname;
 
@@ -30,31 +32,111 @@
                     }
                 })
                 
-                $('#btn_prev').click(function() { updateName(nameindex - 1); });
-                $('#btn_next').click(function() { updateName(nameindex + 1); });
+                $('#btn_prev').click(function() { stepName(-1); });
+                $('#btn_next').click(function() { stepName(1); });
                 if(namelist.length) {
                     updateName(0);
+                    if(!isVisible(0)) { stepName(); }
                 }
 
-                $('#input.attendance').click(function() {
+                $('input[name=attendance]').click(function() { updateRecord(true); });
+                $('#att_save').click(function() { updateRecord(true); });
+                $('#other_text').keyup(function(evt) {
+                    if(evt.which == 13) {
+                        updateRecord(true);
+                        return false;
+                    }
                 });
             });
 
             var valid_stats = ['P','X','XC','LA','LE','NI','SA'];
+            var exclude_statuses = ['LOA','Inactive']; 
+
+            function updateRecord(auto_step) {
+                att_val = $('input[name=attendance]:checked').val();
+                if(att_val == 'LE' || att_val == 'LA') {
+                    //Special handling for time
+                    time_val = $('#att_lateness').val();
+                    if(time_val > 0) {
+                        att_val = att_val + '-' + time_val;
+                    }
+                    //If we're dealing with these guys, don't auto-advance
+                    auto_step = false;
+                } else if(att_val == 'other') {
+                    att_val = $('#other_text').val();
+                }
+                statustext = 'Marking ' + curname.first + ' as ' + att_val + '...';
+                $('#ajax_status').text(statustext).removeClass('error warning').animate({opacity:1});
+                $.post('/att/update',{
+                    'row':curname.row,
+                    'col':curdate,
+                    'wkey':cursheet,
+                    'value':att_val
+                },function(data) {
+                    if(data.status==200) {
+                        if(data.value == att_val) {
+                        $('#ajax_status').text(statustext + 'saved.').delay(500).animate({opacity:0}); 
+                            attdata[data.row] = data.value;
+                            if(auto_step) {
+                                stepName(1);
+                            }
+                        } else {
+                            $('#ajax_status').text(statustext + 'check spreadsheet.').addClass('warning').delay(500).animate({opacity:0}); 
+                            attdata[data.row] = data.value;
+                        }
+                   } else {
+                       $('#ajax_status').text('Marking as ' + att_val + '...failed!').addClass('error'); 
+                   }
+                });
+            }
+
+            function stepName(step) {
+                if(!step) { step = 1; }
+                okay = false;
+                newindex = nameindex;
+                numloops = 0;
+                maxloops = namelist.length/Math.floor(Math.abs(step))
+                while(numloops <= maxloops) {
+                    //Loop around on the edges
+                    newindex = (newindex + step) % namelist.length;
+                    if(newindex < 0) { newindex += namelist.length; }
+
+                    if(isVisible(newindex)) {
+                        updateName(newindex);
+                        return true;
+                    }
+                    numloops++;
+                }
+                return false;
+            }
+
+            function isVisible(checkindex) {
+                checkname = namelist[checkindex];
+                if(!checkname) { return false; }
+                //Exclude any "bad" statuses
+                if($.inArray(checkname.status_holiday, exclude_statuses) > -1) {
+                    return false;
+                }
+                return true;
+            }
+
             function updateName(newindex) {
-                if(newindex < 0) { newindex = namelist.length - 1; }
-                if(newindex >= namelist.length) { newindex = 0; }
                 nameindex = newindex;
-                curname = namelist[newindex];
+                curname = namelist[nameindex];
                 curatt = attdata[curname.row];
                 if(!curname) { curname = "Name Not Found"; }
                 if(!curatt) { curatt = ""; }
 
                 $('#display_name').text(curname.first + " " + curname.last);
+                $('#att_lateness option:first').attr('selected','selected');
                 attarr = curatt.split('-');
                 attstat = attarr[0];
                 if(attarr.length == 2 && (attstat == 'LA' || attstat == 'LE')) { 
                     attlen = attarr[1]; 
+                    linkedelm = $('#att_lateness option[value=' + attlen + ']');
+                    if(linkedelm.length) {
+                        linkedelm.attr('selected','selected');
+                    }
                 }
                 if($.inArray(attstat, valid_stats) != -1) {
                     $('#att_' + attstat).attr('checked','checked');
@@ -63,8 +145,19 @@
                     $('#other_text').val(attstat);
                 }
                 $('#attendance_record input[type=radio]').checkboxradio('refresh');
+                $('#att_lateness').selectmenu('refresh');
             }
         </script>
+        <style>
+            #display_name { margin-bottom: 0; }
+            #ajax_status { 
+                margin-bottom: 1em; 
+                font-size: 80%;
+                color: green;
+            }
+            #ajax_status.error { color: red; }
+            #ajax_status.warning { color: goldenrod; }
+        </style>
     </head>
     <body>
         <div data-role="page" id="page_attendance">
@@ -91,22 +184,23 @@
             </form>
             <div id="attendance_record" style="text-align: center">
                 <h1 id="display_name"></h1>
+                <div id="ajax_status">&nbsp;</div>
                 <fieldset>
                     <div data-role="controlgroup" data-type="horizontal">
-                        <input type="radio" name="attendance" id="att_P"/>
+                        <input type="radio" name="attendance" id="att_P" value="P"/>
                         <label for="att_P">Present</label>
                     </div>
                     <div data-role="controlgroup" data-type="horizontal">
                         <input type="radio" id="att_LA" name="attendance" value="LA"/>
                         <label for="att_LA">LA</label>
-                        <input type="radio" id="att_LE" name="attendance"/>
+                        <input type="radio" id="att_LE" name="attendance" value="LE"/>
                         <label for="att_LE">LE</label>
-                        <select class="attendance" id="att_lateness" name="att_lateness">
+                        <select id="att_lateness" name="att_lateness">
                             <option value="0">N/S</option>
                             <option value="30">30</option>
                             <option value="45">45</option>
                             <option value="60">60</option>
-                            <option value="other">Other</option>
+                            <!--<option value="other">Other</option>-->
                         </select>
                     </div>
                     <div data-role="controlgroup" data-type="horizontal">
@@ -124,8 +218,10 @@
                     <div data-role="controlgroup" data-type="horizontal">
                         <input type="radio" name="attendance" id="att_other" value="other"/>
                         <label for="att_other">Other</label>
-                        <input type="text" name="other_text"/>
+                        <input type="text" name="other_text" id="other_text"/>
+                    </div>
                 </fieldset>
+                <button id="att_save">Save</button>
             </div>
         </div>
     </body>

@@ -17,6 +17,7 @@
 
 import webapp2
 from webapp2_extras import mako, sessions
+from webapp2_static import StaticFileHandler
 import pickle
 import httplib2
 import gdata.docs.service
@@ -75,10 +76,10 @@ class BaseHandler(webapp2.RequestHandler):
             )
             self.token.redirect_uri = 'http://%s:%d/oauth_callback' % (extconf.get('server','host'),extconf.getint('server','port'))
             code=self.request.get('code')
-            print self.request.url
-            print code
+            #print self.request.url
+            #print code
             if(code):
-                print "Return URL (code):" + self.session['return_to']
+                #print "Return URL (code):" + self.session['return_to']
                 self.token.get_access_token(code)
                 self.session['token_data'] = {
                     'access_token': self.token.access_token, 
@@ -86,7 +87,7 @@ class BaseHandler(webapp2.RequestHandler):
                 }
             else:
                 self.session['return_to'] = self.request.path
-                print "Return URL:" + self.session['return_to']
+                #print "Return URL:" + self.session['return_to']
                 self.session_store.save_sessions(self.response)
                 return self.redirect(self.token.generate_authorize_url(redirect_uri=self.token.redirect_uri))
 
@@ -126,12 +127,26 @@ class MainHandler(webapp2.RequestHandler):
         self.response.write('Hello world!')
 
 class AttendanceUpdateHandler(BaseHandler):
-    def post(self, params=None):
-        updater = gdata.spreadsheets.data.build_batch_cells_update(ATTENDANCE_KEY, self.request.post('wkey'))
-        self.token.authorize(updater)
-        updater.add_set_cell(self.request.post('row'),self.request.post('col'),self.request.post('value'))
-        for entry in updater.entry:
-            print entry
+    def post(self):
+        spr_client = gdata.spreadsheets.client.SpreadsheetsClient()
+        self.token.authorize(spr_client)
+
+        update_req = gdata.spreadsheets.data.build_batch_cells_update(extconf.get('spreadsheet','key'), self.request.get('wkey'))
+        update_req.add_set_cell(self.request.get('row'),self.request.get('col'),self.request.get('value'))
+
+        response = spr_client.batch(update_req, force=True)
+
+        celldata = response.entry[0]
+        return_json = {
+            'row': celldata.cell.row,
+            'col': celldata.cell.col,
+            'value': celldata.cell.input_value,
+            'status': celldata.batch_status.code,
+            'text_status': celldata.batch_status.reason
+        }
+            
+        self.response.content_type = 'application/json'
+        self.response.write(json.dumps(return_json))
 
 class AttendanceHandler(BaseHandler):
     def get(self, params=None):
@@ -146,9 +161,7 @@ class AttendanceHandler(BaseHandler):
         worksheetlist = {}
         for entry in allsheets:
             if(entry.title.text.find('Attendance') > -1):
-                print entry.id.text
                 mo = re.search("\/([\w\d]+)$",entry.id.text)
-                print mo.group(1)
                 if(not mo is None):
                     worksheetlist[mo.group(1)] = entry.title.text
 
@@ -159,6 +172,7 @@ class AttendanceHandler(BaseHandler):
         namedata = {}
         namelist = []
         namecols = ['last','first','status_holiday','status_spring','status_summer']
+        exclude_statuses = ['LOA','Inactive']
         if(cursheet):
             #Load the column headings
             headerQuery = gdata.spreadsheets.client.CellQuery(
@@ -172,8 +186,6 @@ class AttendanceHandler(BaseHandler):
                 try:
                     date = datetime.strptime(entry.cell.text, '%m/%d')
                     datelist[entry.cell.col] = entry.cell.text
-                    print date
-                    print entry.cell.col + ":" + entry.cell.text
                 except ValueError:
                     pass
             
@@ -204,9 +216,6 @@ class AttendanceHandler(BaseHandler):
                 namelist = namedata.values();
                 namelist.sort(key=itemgetter('first'))
                 namelist.sort(key=itemgetter('last'))
-
-                print attdata
-                print namedata
 
         context = {'cursheet':cursheet,'curdate':curdate,'worksheets': worksheetlist, 'dates':datelist, 'attdata': attdata, 'namelist':namelist}
         self.render_response('attendance.html', **context)
