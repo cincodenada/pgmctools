@@ -11,6 +11,8 @@
             $(document).bind("mobileinit", function() { $.mobile.ajaxEnabled = false; });
         </script>
         <script src="//code.jquery.com/mobile/1.2.0/jquery.mobile-1.2.0.js"></script>
+        <script src="js/utility.js"></script>
+        <script src="js/moment.min.js"></script>
         <script type="text/javascript">
             var namelist = ${json.dumps(namelist)};
             var attdata = ${json.dumps(attdata)};
@@ -24,12 +26,66 @@
                 $('label[for=att_other]').removeClass('ui-corner-right');
                 $('#other_text').removeClass('ui-corner-all').addClass('ui-corner-right');
 
-
                 $('#section_sel').change(function() {
-                    $(this).closest('form').submit()
-                })
+                    $.mobile.loading('show',{text:'Loading Dates'});
+                    $.ajax({
+                        url: '/att',
+                        dataType: 'json',
+                        type: 'get',
+                        data: $(this).closest('form').serialize(),
+                        success: function(data) {
+                            cursheet = data.cursheet;
+                            if(data.dates) {
+                                $('#date_sel option').remove();
+                                today = moment();
+                                leastdiff = null;
+                                leastday = null;
+                                $.each(data.dates, function(col, curdate) {
+                                    curmoment = moment(curdate,'M/D');
+                                    guessyear = today.year();
+                                    if(Math.abs(curmoment.month() - today.month()) > 6) {
+                                        guessyear++;
+                                    }
+                                    curmoment.year(guessyear);
+                                    daydiff = Math.abs(curmoment.diff(today,'days'));
+                                    if(daydiff < leastdiff || leastdiff == null) { 
+                                        leastdiff = daydiff; leastday = col; 
+                                    }
+
+                                    $('#date_sel').append(
+                                       $('<option></option>').attr('value',col).text(curdate)
+                                    );
+                                });
+                                if(leastday) {
+                                    $('#date_sel option[value=' + leastday + ']').attr('selected','selected');
+                                }
+                                $('#date_sel').prepend('<option value="">Select a Date</option').selectmenu('refresh');
+                            }
+                            $.mobile.loading('hide');
+                            if($('#date_sel').val()) {
+                                $('#date_sel').change();
+                            }
+                        }
+                    });
+                });
                 $('#date_sel').change(function() {
-                    $(this).closest('form').submit()
+                    $.mobile.loading('show',{text:'Loading Section'});
+                    $.ajax({
+                        url: '/att',
+                        dataType: 'json',
+                        type: 'get',
+                        data: $(this).closest('form').serialize(),
+                        success: function(data) {
+                            namelist = data.namelist;
+                            attdata = data.attdata;
+                            cursheet = data.cursheet;
+                            curdate = data.curdate; 
+
+                            updateName(0);
+                            if(!isVisible(0)) { stepName(); }
+                            $.mobile.loading('hide');
+                        }
+                    });
                 })
                 $('#sec_date_sel').submit(function() {
                     if($(this).find('#selection_sel').val() == "") {
@@ -39,10 +95,6 @@
                 
                 $('#btn_prev').click(function() { stepName(-1); });
                 $('#btn_next').click(function() { stepName(1); });
-                if(namelist.length) {
-                    updateName(0);
-                    if(!isVisible(0)) { stepName(); }
-                }
 
                 $('input[name=attendance]').click(function() { updateRecord(true); });
                 $('#att_save').click(function() { updateRecord(true); });
@@ -132,6 +184,15 @@
             }
 
             function updateName(newindex) {
+                if(namelist && namelist.length) {
+                    $('#attendance_record').show()
+                    $('#no_records').hide()
+                } else {
+                    $('#attendance_record').hide()
+                    $('#no_records').show()
+                    return false;
+                }
+
                 nameindex = newindex;
                 curname = namelist[nameindex];
                 curatt = attdata[curname.row];
@@ -204,7 +265,10 @@
                     </select>
                 </fieldset>
             </form>
-            <div id="attendance_record" style="text-align: center">
+            <div id="no_records">
+                <h1>Select a section and date above</h1>
+            </div>
+            <div id="attendance_record" style="text-align: center; display: none;">
                 <h1 id="display_name"></h1>
                 <div id="ajax_status">&nbsp;</div>
                 <fieldset>

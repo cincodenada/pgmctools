@@ -17,6 +17,7 @@
 
 import webapp2
 from webapp2_extras import mako, sessions
+from webapp2_static import StaticFileHandler
 import pickle
 import httplib2
 import gdata.docs.service
@@ -41,10 +42,11 @@ args = parser.parse_args()
 extconf = SafeConfigParser()
 extconf.read('defaults.ini');
 extconf.read(args.config)
-
-config = {}
-config['webapp2_extras.sessions'] = {
-    'secret_key': extconf.get('auth','session_key'),
+config = {
+    'webapp2_extras.sessions': {
+    	'secret_key': extconf.get('auth','session_key'),
+    },
+    'webapp2_static.static_file_path': './static'
 }
 
 class BaseHandler(webapp2.RequestHandler):
@@ -218,10 +220,16 @@ class AttendanceHandler(BaseHandler):
                 namelist.sort(key=itemgetter('last'))
 
         context = {'cursheet':cursheet,'curdate':curdate,'worksheets': worksheetlist, 'dates':datelist, 'attdata': attdata, 'namelist':namelist}
-        self.render_response('attendance.html', **context)
+        mode = self.request.accept.best_match(['text/html','application/json']);
+        if(mode == 'application/json'):
+            self.response.content_type = 'application/json'
+            self.response.write(json.dumps(context))
+        else:
+            self.render_response('attendance.html', **context)
 
 app = webapp2.WSGIApplication([
-    ('/', MainHandler),
+    ('/(js.*)', StaticFileHandler),
+    ('/(css.*)', StaticFileHandler),
     ('/att/update', AttendanceUpdateHandler),
     ('/att/(.*)', AttendanceHandler),
     ('/att', AttendanceHandler),
