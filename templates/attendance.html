@@ -20,6 +20,11 @@
             var curname;
 
             $(document).ready(function(evt){
+                //Format the other box
+                $('label[for=att_other]').removeClass('ui-corner-right');
+                $('#other_text').removeClass('ui-corner-all').addClass('ui-corner-right');
+
+
                 $('#section_sel').change(function() {
                     $(this).closest('form').submit()
                 })
@@ -53,19 +58,25 @@
             var exclude_statuses = ['LOA','Inactive']; 
 
             function updateRecord(auto_step) {
-                att_val = $('input[name=attendance]:checked').val();
-                if(att_val == 'LE' || att_val == 'LA') {
+                disp_val = $('input[name=attendance]:checked').val();
+                att_val = disp_val;
+                if(disp_val == 'LE' || disp_val == 'LA') {
                     //Special handling for time
-                    time_val = $('#att_lateness').val();
+                    time_val = $('#disp_lateness').val();
                     if(time_val > 0) {
-                        att_val = att_val + '-' + time_val;
+                        att_val = disp_val + '-' + time_val;
                     }
+                    disp_val = att_val;
                     //If we're dealing with these guys, don't auto-advance
                     auto_step = false;
-                } else if(att_val == 'other') {
+                } else if(disp_val == 'blank') {
+                    att_val = '';
+                } else if(disp_val == 'other') {
                     att_val = $('#other_text').val();
+                    disp_val = att_val;
                 }
-                statustext = 'Marking ' + curname.first + ' as ' + att_val + '...';
+                statustext = 'Marking ' + curname.first + ' as ' + disp_val + '...';
+                
                 $('#ajax_status').text(statustext).removeClass('error warning').animate({opacity:1});
                 $.post('/att/update',{
                     'row':curname.row,
@@ -85,7 +96,7 @@
                             attdata[data.row] = data.value;
                         }
                    } else {
-                       $('#ajax_status').text('Marking as ' + att_val + '...failed!').addClass('error'); 
+                       $('#ajax_status').text('Marking as ' + disp_val + '...failed!').addClass('error'); 
                    }
                 });
             }
@@ -127,6 +138,7 @@
                 if(!curname) { curname = "Name Not Found"; }
                 if(!curatt) { curatt = ""; }
 
+                $('#other_text').val('');
                 $('#display_name').text(curname.first + " " + curname.last);
                 $('#att_lateness option:first').attr('selected','selected');
                 attarr = curatt.split('-');
@@ -141,8 +153,12 @@
                 if($.inArray(attstat, valid_stats) != -1) {
                     $('#att_' + attstat).attr('checked','checked');
                 } else {
-                    $('#att_other').attr('checked','checked');
-                    $('#other_text').val(attstat);
+                    if(attstat == '') {
+                        $('#att_blank').attr('checked','checked');
+                    } else {
+                        $('#att_other').attr('checked','checked');
+                        $('#other_text').val(attstat);
+                    }
                 }
                 $('#attendance_record input[type=radio]').checkboxradio('refresh');
                 $('#att_lateness').selectmenu('refresh');
@@ -157,6 +173,12 @@
             }
             #ajax_status.error { color: red; }
             #ajax_status.warning { color: goldenrod; }
+
+            #other_text {
+                width: 100px;
+                line-height: 1.7;
+                margin: 0px;
+            }
         </style>
     </head>
     <body>
@@ -214,6 +236,8 @@
                         <label for="att_SA">SA</label>
                         <input type="radio" name="attendance" id="att_NI" value="NI"/>
                         <label for="att_NI">NI</label>
+                        <input type="radio" name="attendance" id="att_blank" value="blank"/>
+                        <label for="att_blank">(B)</label>
                     </div>
                     <div data-role="controlgroup" data-type="horizontal">
                         <input type="radio" name="attendance" id="att_other" value="other"/>

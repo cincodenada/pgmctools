@@ -17,7 +17,6 @@
 
 import webapp2
 from webapp2_extras import mako, sessions
-from webapp2_static import StaticFileHandler
 import pickle
 import httplib2
 import gdata.docs.service
@@ -124,7 +123,8 @@ class OAuthHandler(BaseHandler):
 
 class MainHandler(webapp2.RequestHandler):
     def get(self):
-        self.response.write('Hello world!')
+        self.response.write('You want to go <a href="/att">here</a>.')
+        self.redirect('/att');
 
 class AttendanceUpdateHandler(BaseHandler):
     def post(self):
